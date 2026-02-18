@@ -43,7 +43,7 @@ pip install pyvisa pyvisa-py
 ## 🚀 Run
 
 ```bash
-python rigol_gui.py
+python rigol_fg_gui_final2.py
 ```
 
 Workflow:
