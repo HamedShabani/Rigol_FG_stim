@@ -117,4 +117,4 @@ Normal during remote control. Press DISC to release.
 ---
 
 ## License
-MIT (or your chosen license)
+MIT
