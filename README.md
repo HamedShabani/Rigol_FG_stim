@@ -5,6 +5,10 @@ repeatable burst stimulation with synchronized TTL output via **SYNC OUT**.
 
 Designed for lab workflows where operators need an easy and safe interface.
 
+1.	Install python 3.xx
+2.	Install Ultrasigma driver from Rigol website
+3.	Go to https://github.com/HamedShabani/Rigol_FG_stim and download the file rigol_fg_gui_final2.py
+
 ---
 
 ## ✨ Features
