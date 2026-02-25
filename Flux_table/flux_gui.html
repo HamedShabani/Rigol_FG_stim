@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Magnetic Flux Calibration Tool</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .row { margin: 10px 0; }
+    label { display:inline-block; width: 160px; }
+    input, select { padding: 6px; }
+    .out { margin-top: 16px; padding: 10px; border: 1px solid #ccc; }
+    button { padding: 8px 14px; }
+  </style>
+</head>
+<body>
+  <h2>Magnetic Flux Calibration Tool</h2>
+
+  <div class="row">
+    <label>Frequency (Hz):</label>
+    <select id="freq">
+      <option value="5">5</option>
+      <option value="10">10</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label>Mode:</label>
+    <select id="mode">
+      <option value="B_to_V">B → FG Voltage</option>
+      <option value="V_to_B">FG Voltage → B</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label id="inputLabel">Target B peak (mT):</label>
+    <input id="inputVal" type="number" step="any" />
+  </div>
+
+  <div class="row">
+    <label></label>
+    <input id="extrap" type="checkbox" />
+    <span>Allow extrapolation</span>
+  </div>
+
+  <div class="row">
+    <label></label>
+    <button onclick="compute()">Compute</button>
+    <button onclick="clearAll()">Clear</button>
+  </div>
+
+  <div class="out" id="out">
+    <div id="o1">—</div>
+    <div id="o2">—</div>
+  </div>
+
+<script>
+const DATA = {
+  5: {
+    V: [0.5,1,1.5,2,2.5,3,3.5,4],
+    I: [1.8,3.6,5.3,7.1,9.2,11.03,12.8,14.6],
+    B: [7,14.2,21.3,28.5,35.7,42.8,49.6,56.6]
+  },
+  10: {
+    V: [0.5,1,1.5,2,2.5,3,3.5,4],
+    I: [1.8,3.1,4.5,5.9,7.3,8.7,10.1,11.7],
+    B: [5.7,11.3,17.03,22.5,28.6,34.1,39.6,45.6]
+  }
+};
+
+function interp(x, xp, fp, allowExtrap=false) {
+  x = Number(x);
+
+  if (x < xp[0]) {
+    if (!allowExtrap) return null;
+    const x0=xp[0], x1=xp[1], y0=fp[0], y1=fp[1];
+    return y0 + (y1-y0)*(x-x0)/(x1-x0);
+  }
+  if (x > xp[xp.length-1]) {
+    if (!allowExtrap) return null;
+    const n=xp.length;
+    const x0=xp[n-2], x1=xp[n-1], y0=fp[n-2], y1=fp[n-1];
+    return y0 + (y1-y0)*(x-x1)/(x1-x0);
+  }
+
+  for (let i=0;i<xp.length-1;i++) {
+    if (xp[i] <= x && x <= xp[i+1]) {
+      const x0=xp[i], x1=xp[i+1], y0=fp[i], y1=fp[i+1];
+      return y0 + (y1-y0)*(x-x0)/(x1-x0);
+    }
+  }
+  return null;
+}
+
+function updateLabel() {
+  const mode = document.getElementById("mode").value;
+  document.getElementById("inputLabel").textContent =
+    (mode === "B_to_V") ? "Target B peak (mT):" : "FG Voltage p-p (V):";
+}
+document.getElementById("mode").addEventListener("change", updateLabel);
+
+function compute() {
+  const freq = Number(document.getElementById("freq").value);
+  const mode = document.getElementById("mode").value;
+  const valStr = document.getElementById("inputVal").value;
+  const allowExtrap = document.getElementById("extrap").checked;
+
+  if (valStr === "") { alert("Enter a value"); return; }
+  const val = Number(valStr);
+
+  const t = DATA[freq];
+  const V=t.V, I=t.I, B=t.B;
+
+  let o1="", o2="";
+
+  if (mode === "B_to_V") {
+    const v = interp(val, B, V, allowExtrap);
+    const i = interp(val, B, I, allowExtrap);
+    if (v === null) { alert(`B range is ${B[0]}–${B[B.length-1]} mT`); return; }
+    o1 = `Required FG Voltage: ${v.toFixed(3)} Vpp`;
+    o2 = `Expected Current: ${i.toFixed(3)} App`;
+  } else {
+    const b = interp(val, V, B, allowExtrap);
+    const i = interp(val, V, I, allowExtrap);
+    if (b === null) { alert(`Voltage range is ${V[0]}–${V[V.length-1]} Vpp`); return; }
+    o1 = `B Flux: ${b.toFixed(3)} mT`;
+    o2 = `Current: ${i.toFixed(3)} App`;
+  }
+
+  document.getElementById("o1").textContent = o1;
+  document.getElementById("o2").textContent = o2;
+}
+
+function clearAll() {
+  document.getElementById("inputVal").value = "";
+  document.getElementById("o1").textContent = "—";
+  document.getElementById("o2").textContent = "—";
+}
+
+updateLabel();
+</script>
+</body>
+</html>
