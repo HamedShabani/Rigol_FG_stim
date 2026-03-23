@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import pyvisa
 
-DEFAULT_VISA = "USB0::0x0957::0x0407::MY44008868::INSTR"  # replace with your 33210A VISA if needed
+DEFAULT_VISA = "USB0::0x0957::0x0407::MY44008868::INSTR"  # change if needed
 
 
 class KeysightBurstGUI(tk.Tk):
@@ -135,7 +135,7 @@ class KeysightBurstGUI(tk.Tk):
             row=7, column=0, columnspan=6, sticky="w"
         )
 
-    # ---------------- Thread-safe UI helpers ----------------
+    # ---------------- UI-safe helpers ----------------
     def ui(self, fn, *args, **kwargs):
         self.after(0, lambda: fn(*args, **kwargs))
 
@@ -193,19 +193,9 @@ class KeysightBurstGUI(tk.Tk):
     def show_last_error(self):
         errs = self.drain_errors()
         meaningful = [e for e in errs if not (e.startswith("+0") or e.startswith("0,"))]
-        if meaningful:
-            self.ui(self.set_err, "FG error: " + " | ".join(meaningful))
-        else:
-            self.ui(self.set_err, "")
+        self.ui(self.set_err, "" if not meaningful else "FG error: " + " | ".join(meaningful))
 
-    def write_checked(self, cmd, allow_warnings=False):
-        self.write(cmd)
-        errs = self.drain_errors()
-        meaningful = [e for e in errs if not (e.startswith("+0") or e.startswith("0,"))]
-        if meaningful and not allow_warnings:
-            raise RuntimeError(f"{cmd} -> {' | '.join(meaningful)}")
-
-    # ---------------- Timeline overlay ----------------
+    # ---------------- Timeline ----------------
     def _draw_timeline_static(self, reps: int, dur: float, interval: float):
         self.timeline.delete("all")
         w = int(self.timeline.winfo_width() or 360)
@@ -248,7 +238,7 @@ class KeysightBurstGUI(tk.Tk):
         )
         self.timeline.create_line(x, 1, x, h - 1, fill="#1f77b4", width=2, tags="marker")
 
-    # ---------------- Auto-find Keysight 33210A ----------------
+    # ---------------- Find 33210A ----------------
     def auto_find_33210a(self):
         rm = pyvisa.ResourceManager()
         for r in rm.list_resources():
@@ -271,10 +261,7 @@ class KeysightBurstGUI(tk.Tk):
         if visa == "" or visa.upper() == "AUTO":
             addr, idn = self.auto_find_33210a()
             if not addr:
-                messagebox.showwarning(
-                    "Not found",
-                    "Keysight 33210A not found.\n\nCheck:\n- USB cable\n- VISA installed\n- instrument powered on"
-                )
+                messagebox.showwarning("Not found", "Keysight 33210A not found.")
                 return
             self.visa_var.set(addr)
             visa = addr
@@ -328,28 +315,40 @@ class KeysightBurstGUI(tk.Tk):
         except Exception as e:
             messagebox.showerror("IDN Error", str(e))
 
-    # ---------------- Keysight 33210A config ----------------
+    # ---------------- Keysight config ----------------
     def configure_fg(self, freq, dur, amp):
         cycles = max(1, int(round(freq * dur)))
 
         self.write("*CLS")
-        time.sleep(0.1)
+        time.sleep(0.05)
 
-        # no *RST while debugging; it can reset useful state and slow things down
-        self.write_checked("FUNC SIN")
-        self.write_checked(f"FREQ {freq}")
-        self.write_checked(f"VOLT {amp}")
-        self.write_checked("VOLT:OFFS 0")
+        self.write("FUNC SIN")
+        self.write(f"FREQ {freq}")
+        self.write(f"VOLT {amp}")
+        self.write("VOLT:OFFS 0")
 
-        self.write_checked("BURS:STAT ON")
-        self.write_checked("BURS:MODE TRIG")
-        self.write_checked(f"BURS:NCYC {cycles}")
-        self.write_checked("TRIG:SOUR BUS")
-        self.write_checked("OUTP ON")
+        self.write("BURS:STAT ON")
+        self.write("BURS:MODE TRIG")
+
+        # Critical fix: set BUS trigger BEFORE NCYC
+        self.write("TRIG:SOUR BUS")
+
+        # Optional but helps avoid stale state
+        self.write("TRIG:SLOP POS")
+
+        self.write(f"BURS:NCYC {cycles}")
+
+        self.write("OUTP ON")
+
+        # Now verify once at end
+        errs = self.drain_errors()
+        meaningful = [e for e in errs if not (e.startswith("+0") or e.startswith("0,"))]
+        if meaningful:
+            raise RuntimeError(" | ".join(meaningful))
 
         return cycles
 
-    # ---------------- Run logic ----------------
+    # ---------------- Run ----------------
     def run_sequence(self):
         if not self.instr:
             return
